@@ -21,7 +21,7 @@ pub struct Follow {
 #[serde(rename_all = "camelCase")]
 pub struct FollowVal {
     #[serde(rename = "$type")]
-    pub type_field: String,
+    pub type_field: Option<String>,
     pub subject: String,
     #[serde(rename = "createdAt")]
     pub created_at: String,
@@ -54,7 +54,7 @@ pub struct Commit {
 #[serde(rename_all = "camelCase")]
 pub struct Record {
     #[serde(rename = "$type")]
-    pub type_field: String,
+    pub type_field: Option<String>,
     pub created_at: String,
     pub subject: Option<Subj>,
     pub lang: Option<String>,
@@ -84,7 +84,7 @@ pub struct Index {
 #[serde(rename_all = "camelCase")]
 pub struct Feature {
     #[serde(rename = "$type")]
-    pub type_field: String,
+    pub type_field: Option<String>,
     pub uri: Option<String>,
 }
 
@@ -100,7 +100,7 @@ pub struct Image {
 #[serde(rename_all = "camelCase")]
 pub struct ImageInternal {
     #[serde(rename = "$type")]
-    pub type_field: String,
+    pub type_field: Option<String>,
     #[serde(rename = "ref")]
     pub reff: Ref,
     pub mime_type: String,

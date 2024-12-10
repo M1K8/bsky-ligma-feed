@@ -256,6 +256,7 @@ async fn fetch_and_return_posts(
             if let Some(val) = res_vec.last() {
                 cursor = val.timestamp.to_string();
             } else {
+                info!("Reached the end");
                 break;
             }
             info!("Cursor is {:?}", cursor);

@@ -218,7 +218,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let e = ws.read_frame().await;
         match e {
             Ok(_) => info!("Were ok?"),
-            Err(e) => error!("Err: {e}"),
+            Err(e) => {
+                ws = ws::connect("jetstream2.us-east.bsky.network", url2.clone()).await?;
+                error!("Err: {e}")
+            },
         };
     }
 }

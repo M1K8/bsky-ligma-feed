@@ -117,43 +117,41 @@ pub async fn listen_channel(
 
         let lock = write_lock.clone();
         let second_deg_conn = conn.clone();
-        let seen_map = seen_map.clone();
+        let seen_map_cl = seen_map.clone();
 
-        let bl_seen_map = seen_map.clone();
+        if !seen_map_cl.contains(&did) {
+            match get_follows(&did, cl_follows).await {
+                Ok(follows) => {
+                    // TODO - Have map of currently fetching users to prevent replay
+                    tokio::spawn(async move {
+                        info!("Recursively fetching {} follows for {did}", follows.len());
 
-        match get_follows(&did, cl_follows).await {
-            Ok(follows) => {
-                // TODO - Have map of currently fetching users to prevent replay
-                tokio::spawn(async move {
-                    info!("Recursively fetching {} follows for {did}", follows.len());
+                        let all_follows = Arc::new(DashSet::new());
+                        if !seen_map_cl.contains(&did) {
+                            follows.iter().for_each(|f| {
+                                all_follows.insert((f.0.clone(), f.1.clone(), did.clone()));
+                            });
+                        }
+                        let mut set = JoinSet::new();
+                        let all_followers_chunks: Vec<&[(String, String)]> =
+                            follows.chunks(follows.len() / 12).collect();
 
-                    let all_follows = Arc::new(DashSet::new());
-                    if !seen_map.contains(&did) {
-                        follows.iter().for_each(|f| {
-                            all_follows.insert((f.0.clone(), f.1.clone(), did.clone()));
-                        });
-                    }
-                    seen_map.insert(did.clone());
-                    let mut set = JoinSet::new();
-                    let all_followers_chunks: Vec<&[(String, String)]> =
-                        follows.chunks(follows.len() / 12).collect();
+                        for idx in 0..all_followers_chunks.len() {
+                            let mut c = match all_followers_chunks.get(idx) {
+                                Some(c) => *c,
+                                None => {
+                                    continue;
+                                }
+                            };
+                            // this is so fun i love doing this
+                            let yoinked = mem::take(&mut c);
+                            let chunk = Vec::from(yoinked);
+                            //
 
-                    for idx in 0..all_followers_chunks.len() {
-                        let mut c = match all_followers_chunks.get(idx) {
-                            Some(c) => *c,
-                            None => {
-                                continue;
-                            }
-                        };
-                        // this is so fun i love doing this
-                        let yoinked = mem::take(&mut c);
-                        let chunk = Vec::from(yoinked);
-                        //
+                            let seen_map = seen_map_cl.clone();
+                            let all_follows = all_follows.clone();
 
-                        let seen_map = seen_map.clone();
-                        let all_follows = all_follows.clone();
-
-                        set.spawn(async move {
+                            set.spawn(async move {
                             for (did, _) in chunk {
                                 if seen_map.contains(&did) {
                                     // Already fetched this one, no need to do it again
@@ -191,27 +189,27 @@ pub async fn listen_channel(
                                 };
                             }
                         });
-                    }
-                    set.join_all().await;
-                    info!("There are {} chunks", all_followers_chunks.len());
-                    info!(
-                        "Done Recursively fetching {} for {did}; writing...",
-                        follows.len()
-                    );
+                        }
+                        set.join_all().await;
+                        info!("There are {} chunks", all_followers_chunks.len());
+                        info!(
+                            "Done Recursively fetching {} for {did}; writing...",
+                            follows.len()
+                        );
 
-                    match write_follows(all_follows, &second_deg_conn, lock).await {
-                        Some(e) => warn!("Error writing 2nd degree follows for {did}: {:?}", e),
-                        None => {}
-                    }
-                    in_flight_loop.remove(&did);
-                });
-            }
-            Err(e) => {
-                warn!("Error getting follows for {}: {}", &msg.did, e);
-                continue;
-            }
-        };
-        if !bl_seen_map.contains(&msg.did) {
+                        match write_follows(all_follows, &second_deg_conn, lock).await {
+                            Some(e) => warn!("Error writing 2nd degree follows for {did}: {:?}", e),
+                            None => {}
+                        }
+                        in_flight_loop.remove(&did);
+                    });
+                }
+                Err(e) => {
+                    warn!("Error getting follows for {}: {}", &msg.did, e);
+                    continue;
+                }
+            };
+
             // Blocks
             let did_blocks = msg.did.clone();
             let cl_blocks = client.clone();
@@ -222,6 +220,7 @@ pub async fn listen_channel(
                     continue;
                 }
             };
+            seen_map.insert(msg.did.clone());
         }
         match fetch_and_return_posts(msg, &read_conn, &cursor).await {
             Ok(_) => {}
